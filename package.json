@@ -1,0 +1,25 @@
+{
+  "name": "jelly-jump-web-lens",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Jelly Jump — a portrait 3D soft-body platformer Web Lens",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "verify": "node tools/verify.mjs",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "pack": "node tools/pack.mjs"
+  },
+  "dependencies": {
+    "@snap/web-lens-api": "latest",
+    "playcanvas": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "archiver": "^8.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#090c22" />
+    <meta name="description" content="Jelly Jump — stretch, fling, and bounce your squishy jelly through a dreamy 3D obstacle course." />
+    <title>Jelly Jump — Soft Body Sprint</title>
+  </head>
+  <body>
+    <div id="app-shell">
+      <canvas id="game-canvas" aria-label="Jelly Jump 3D game scene"></canvas>
+      <div class="screen-glow" aria-hidden="true"></div>
+      <main id="hud" class="hud" aria-live="polite">
+        <header class="topbar">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div><div class="brand-name">JELLY <b>JUMP</b></div><div class="brand-kicker">SOFT-BODY SPRINT</div></div>
+          </div>
+          <div class="hud-actions">
+            <button class="icon-button" id="sound-button" aria-label="Toggle sound" title="Sound">♪</button>
+            <button class="icon-button" id="pause-button" aria-label="Pause game" title="Pause" hidden>Ⅱ</button>
+          </div>
+        </header>
+
+        <section class="score-strip" aria-label="Game statistics">
+          <div class="stat-card"><span class="stat-label">LEVEL</span><strong id="level-value">01</strong></div>
+          <div class="stat-card berry-stat"><span class="berry-gem" aria-hidden="true">✦</span><div><span class="stat-label">BERRIES</span><strong id="berry-value">000</strong></div></div>
+          <div class="stat-card best-stat"><span class="stat-label">BEST RUN</span><strong id="best-value">00</strong></div>
+        </section>
+
+        <section class="avatar-widget" id="avatar-widget" aria-label="Your reaction avatar">
+          <div class="avatar-halo"><div id="avatar-fallback" class="avatar-fallback" aria-hidden="true"><span class="avatar-hair"></span><span class="avatar-face">•ᴗ•</span></div><img id="bitmoji-image" alt="Your Bitmoji" hidden /></div>
+          <span id="avatar-reaction" class="avatar-reaction" aria-hidden="true">✦</span>
+          <div class="avatar-caption"><strong id="avatar-name">SQUISH MODE</strong><span id="avatar-mood">Ready to wobble</span></div>
+        </section>
+
+        <section id="ready-panel" class="glass-panel intro-panel">
+          <div class="eyebrow"><span class="eyebrow-dot"></span> A LITTLE EXTRA SQUISH</div>
+          <h1>Stretch.<br /><em>Send it.</em></h1>
+          <p>Pull back to aim. Let go to launch your jelly through the sky.</p>
+          <div class="mini-feature-row"><span>✧ SQUISH PHYSICS</span><span>✦ BERRY HUNT</span></div>
+          <button class="primary-button" id="play-button"><span class="button-icon">▶</span><span>LET'S JUMP</span><span class="button-arrow">↗</span></button>
+          <button class="text-button" id="how-button">HOW TO PLAY <span>↗</span></button>
+        </section>
+
+        <section id="aim-hint" class="aim-hint" hidden>
+          <span class="aim-line"></span><span>DRAG BACK TO AIM</span><span class="aim-line"></span>
+        </section>
+        <div id="drag-chip" class="drag-chip" hidden><span class="drag-chip-dot"></span><span>RELEASE TO FLING</span></div>
+
+        <section id="tint-dock" class="tint-dock" aria-label="Jelly colors">
+          <div class="dock-label">YOUR JELLY</div>
+          <div class="tint-options">
+            <button class="tint-swatch selected" data-tint="aqua" aria-label="Aqua jelly" title="Aqua"><span style="--swatch:#73f3ec"></span></button>
+            <button class="tint-swatch" data-tint="berry" aria-label="Berry jelly" title="Berry"><span style="--swatch:#ff76bd"></span></button>
+            <button class="tint-swatch" data-tint="lilac" aria-label="Lilac jelly" title="Lilac"><span style="--swatch:#b9a1ff"></span></button>
+            <button class="tint-swatch" data-tint="sunshine" aria-label="Sunshine jelly" title="Sunshine"><span style="--swatch:#ffd875"></span></button>
+          </div>
+        </section>
+
+        <section id="gameover-panel" class="glass-panel result-panel" hidden>
+          <div id="result-eyebrow" class="eyebrow"><span class="eyebrow-dot"></span> NICE TRY, LITTLE JELLY</div>
+          <h2 id="result-title">A LITTLE<br /><em>SPLAT.</em></h2>
+          <p id="result-copy">Every bounce makes a better run.</p>
+          <div class="result-score"><span>LEVELS CLEARED</span><strong id="final-score">00</strong></div>
+          <button class="primary-button" id="retry-button"><span class="button-icon">↻</span><span>ONE MORE RUN</span><span class="button-arrow">↗</span></button>
+          <button class="text-button" id="leaderboard-button" hidden>VIEW LEADERBOARD <span>↗</span></button>
+        </section>
+
+        <section id="pause-panel" class="glass-panel pause-panel" hidden>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> TAKE A BREATHER</div><h2>PAUSE<br /><em>THE SQUISH.</em></h2>
+          <button class="primary-button" id="resume-button"><span class="button-icon">▶</span><span>BACK TO IT</span><span class="button-arrow">↗</span></button>
+          <button class="text-button" id="pause-how-button">HOW TO PLAY <span>↗</span></button>
+        </section>
+
+        <div id="how-modal" class="modal-scrim" hidden>
+          <section class="glass-panel how-panel" role="dialog" aria-modal="true" aria-labelledby="how-title">
+            <button class="modal-close" id="close-how-button" aria-label="Close instructions">×</button>
+            <div class="eyebrow"><span class="eyebrow-dot"></span> THREE LITTLE STEPS</div>
+            <h2 id="how-title">MASTER THE<br /><em>WOBBLE.</em></h2>
+            <div class="instruction-list">
+              <div class="instruction"><span class="instruction-number">01</span><div><strong>PRESS & PULL</strong><p>Touch the scene and drag opposite the way you want to fly. Watch the dotted arc.</p></div><span class="instruction-art pull-art">↙</span></div>
+              <div class="instruction"><span class="instruction-number">02</span><div><strong>LET GO TO LAUNCH</strong><p>Your jelly stretches, sails, squashes, and bounces. Aim for the glowing platform.</p></div><span class="instruction-art launch-art">↗</span></div>
+              <div class="instruction"><span class="instruction-number">03</span><div><strong>SNAG THE BERRIES</strong><p>Collect shiny berries, dodge coral spikes, and unlock your favorite jelly color.</p></div><span class="instruction-art berry-art">✦</span></div>
+            </div>
+            <button class="primary-button" id="got-it-button"><span class="button-icon">✓</span><span>GOT IT, LET'S GO</span><span class="button-arrow">↗</span></button>
+          </section>
+        </div>
+
+        <footer class="bottom-caption" id="bottom-caption"><span class="tiny-star">✦</span> ONE MORE BOUNCE NEVER HURT <span class="tiny-star">✦</span></footer>
+        <div id="loading-screen" class="loading-screen"><div class="loading-orb"><span></span><span></span><span></span></div><strong>WAKING UP THE JELLY</strong><div class="loading-track"><span></span></div><small>Polishing the squish...</small></div>
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      </main>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

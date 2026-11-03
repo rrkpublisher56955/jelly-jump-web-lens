@@ -1,0 +1,5 @@
+node_modules/
+dist/
+my-web-lens.zip
+*.log
+.DS_Store
