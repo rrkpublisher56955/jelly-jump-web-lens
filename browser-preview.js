@@ -577,18 +577,41 @@
   }
 
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.floor(innerWidth * dpr);
     canvas.height = Math.floor(innerHeight * dpr);
     canvas.style.width = `${innerWidth}px`; canvas.style.height = `${innerHeight}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    stars = Array.from({ length: 78 }, () => ({
-      x: Math.random(), y: Math.random(), r: .35 + Math.random() * 1.35,
+    stars = Array.from({ length: 96 }, () => ({
+      x: Math.random(), y: Math.random(), r: .35 + Math.random() * 1.45,
       speed: .35 + Math.random() * 1.25, phase: Math.random() * Math.PI * 2,
-      color: Math.random() < .5 ? 'rgba(181,213,255,.8)' : 'rgba(150,255,238,.9)'
+      color: Math.random() < .5 ? 'rgba(181,213,255,.85)' : 'rgba(64,245,232,.95)'
     }));
     render();
   }
+
+  // YouTube Playables & System One Integration Hooks
+  const ytSDK = window.YTPlayables || window.ytplayables || null;
+  if (ytSDK && typeof ytSDK.firstFrameReady === 'function') {
+    try { ytSDK.firstFrameReady(); } catch { /* Optional host hook */ }
+  }
+  if (ytSDK && typeof ytSDK.onPause === 'function') ytSDK.onPause(pauseGame);
+  if (ytSDK && typeof ytSDK.onResume === 'function') ytSDK.onResume(pauseGame);
+
+  // Desktop & YouTube Playables Keyboard Navigation
+  window.addEventListener('keydown', (event) => {
+    if (event.code === 'Space') {
+      event.preventDefault();
+      if (!started || state === 'gameover') {
+        if (state === 'gameover') resetWorld();
+        startGame();
+      }
+    } else if (event.code === 'KeyP') {
+      pauseGame();
+    } else if (event.code === 'KeyM') {
+      $('sound-button').click();
+    }
+  });
 
   $('play-button').addEventListener('click', startGame);
   $('retry-button').addEventListener('click', () => { resetWorld(); startGame(); });
