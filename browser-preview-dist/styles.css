@@ -874,6 +874,12 @@ p {
     right: calc(var(--inset-right) + 120px);
   }
 
+  .tint-dock {
+    bottom: calc(var(--inset-bottom) + 18px);
+    padding: 6px 14px 8px;
+    gap: 4px;
+  }
+
   .intro-panel,
   .result-panel,
   .pause-panel {
