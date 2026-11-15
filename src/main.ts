@@ -204,7 +204,10 @@ async function boot(): Promise<void> {
       showTintSelection(tint);
       snapRouter.updateSave({ tint });
     },
-    onBerry: (berries) => snapRouter.updateSave({ berries })
+    onBerry: (berries) => {
+      audio.playBerry();
+      snapRouter.updateSave({ berries });
+    }
   }, saved);
 
   showTintSelection(saved.tint);

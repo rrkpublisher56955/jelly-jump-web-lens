@@ -9,7 +9,7 @@ export class BoingAudio {
   async unlock(): Promise<void> {
     if (this.muted) return;
     try {
-      const AudioContextCtor = window.AudioContext;
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextCtor) return;
       if (!this.context) this.context = new AudioContextCtor({ latencyHint: 'interactive' });
       if (this.context.state === 'suspended') await this.context.resume();
@@ -27,33 +27,91 @@ export class BoingAudio {
   }
 
   playBoing(power = 0.5, impact = false): void {
-    if (this.muted || !this.context || this.context.state !== 'running') return;
-    const ctx = this.context;
-    const now = ctx.currentTime;
-    const oscillator = ctx.createOscillator();
-    const overtone = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const overtoneGain = ctx.createGain();
-    const base = (impact ? 235 : 310) + Math.max(0, Math.min(1, power)) * 175;
-    oscillator.type = 'sine';
-    overtone.type = 'triangle';
-    oscillator.frequency.setValueAtTime(base * (impact ? 1.45 : 1.75), now);
-    oscillator.frequency.exponentialRampToValueAtTime(Math.max(75, base * 0.52), now + (impact ? 0.18 : 0.24));
-    overtone.frequency.setValueAtTime(base * 2.1, now);
-    overtone.frequency.exponentialRampToValueAtTime(base * 0.8, now + 0.16);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(impact ? 0.11 : 0.075, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (impact ? 0.23 : 0.29));
-    overtoneGain.gain.setValueAtTime(0.0001, now);
-    overtoneGain.gain.exponentialRampToValueAtTime(impact ? 0.022 : 0.014, now + 0.015);
-    overtoneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-    oscillator.connect(gain).connect(ctx.destination);
-    overtone.connect(overtoneGain).connect(ctx.destination);
-    oscillator.start(now);
-    overtone.start(now);
-    oscillator.stop(now + 0.31);
-    overtone.stop(now + 0.16);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-    overtone.onended = () => { overtone.disconnect(); overtoneGain.disconnect(); };
+    if (this.muted) return;
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!this.context) this.context = new AudioContextCtor({ latencyHint: 'interactive' });
+      if (this.context.state === 'suspended') void this.context.resume();
+      const ctx = this.context;
+      const t = ctx.currentTime;
+      const clampedPower = Math.max(0, Math.min(1, power));
+      const base = (impact ? 175 : 290) + clampedPower * 140;
+
+      // Primary tone carrier
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = impact ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(base * (impact ? 1.5 : 1.9), t);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(48, base * 0.38), t + (impact ? 0.28 : 0.22));
+
+      // Organic FM squelch modulation
+      const mod = ctx.createOscillator();
+      const modGain = ctx.createGain();
+      mod.type = 'sine';
+      mod.frequency.setValueAtTime(impact ? 85 : 130, t);
+      mod.frequency.exponentialRampToValueAtTime(25, t + 0.18);
+      modGain.gain.setValueAtTime(base * (impact ? 0.9 : 0.6), t);
+      modGain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+      mod.connect(osc.frequency);
+      mod.start(t);
+      mod.stop(t + 0.2);
+
+      // Low pass acoustic warm filter
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(impact ? 1800 : 3200, t);
+      filter.frequency.exponentialRampToValueAtTime(320, t + 0.25);
+
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(impact ? 0.16 : 0.09, t + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + (impact ? 0.32 : 0.26));
+
+      osc.connect(filter).connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.35);
+
+      // Sub-bass physical gelatin impact thud
+      if (impact) {
+        const sub = ctx.createOscillator();
+        const subGain = ctx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(75, t);
+        sub.frequency.exponentialRampToValueAtTime(32, t + 0.15);
+        subGain.gain.setValueAtTime(0.18, t);
+        subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+        sub.connect(subGain).connect(ctx.destination);
+        sub.start(t);
+        sub.stop(t + 0.2);
+      }
+    } catch {
+      // Audio is an enhancement
+    }
+  }
+
+  playBerry(): void {
+    if (this.muted) return;
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!this.context) this.context = new AudioContextCtor({ latencyHint: 'interactive' });
+      if (this.context.state === 'suspended') void this.context.resume();
+      const ctx = this.context;
+      const t = ctx.currentTime;
+      [880, 1318.5, 1760].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t + i * 0.05);
+        gain.gain.setValueAtTime(0.0001, t + i * 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.08, t + i * 0.05 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.05 + 0.3);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t + i * 0.05);
+        osc.stop(t + i * 0.05 + 0.32);
+      });
+    } catch {
+      // Audio is an enhancement
+    }
   }
 }

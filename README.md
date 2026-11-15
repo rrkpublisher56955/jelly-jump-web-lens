@@ -35,6 +35,8 @@
 - **YouTube Playables Full Compliance:** Native lifecycle management (`firstFrameReady`, `gameReady`, `sendScore`, `onPause`, `onResume`), responsive dual-aspect viewport support (Portrait 9:16 and Landscape 16:9), and desktop keyboard navigation.
 - **Snapchat Web Lens Certified:** Full integration with `@snap/web-lens-api`, supporting Bitmoji 2D reactions, localized storage, and lens leaderboards, packaged within an ultra-compact `< 1 MiB` ZIP footprint.
 - **Retina & 8K Crisp Graphics:** High-DPI canvas rasterization at native device pixel ratios (up to `2.5×`), physically-based materials with fresnel rim lighting, gloss highlights, subsurface scattering glow, and ground-bounce particle physics.
+- **Realistic 3D Volumetric Engine:** Deep PBR chamfered monoliths with quantum laser conduits, 5-layer optical translucent gelatin with secondary spring inertia, 3D faceted ruby-obsidian crystal spikes, rotating prismatic star gems with gyroscope rings, and an 8K cosmic nebula environment with a distant ringed gas giant.
+- **Organic Physical Audio Synthesis:** Real-time Web Audio FM squelch modulation, warm acoustic low-pass filtering, physical sub-bass gelatin impact thud (75 Hz → 32 Hz), and pentatonic celestial star chimes.
 
 ---
 

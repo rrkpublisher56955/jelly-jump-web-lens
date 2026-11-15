@@ -1,8 +1,8 @@
 /*
  * Dependency-free offline preview of Jelly Jump.
  * The production source is the PlayCanvas/Vite TypeScript app under src/.
- * This preview draws the same soft-body fling loop in a perspective Canvas 2D renderer
- * so controls and UX can be tried when package-registry access is unavailable.
+ * High-fidelity 8K Canvas 2D perspective renderer with PBR frosted glass platforms,
+ * volumetric subsurface gelatin physics, crystalline hazards, and deep space nebulae.
  */
 (() => {
   'use strict';
@@ -18,11 +18,48 @@
     return;
   }
 
+  // Realistic PBR Gelatin Palettes (Subsurface Scattering, Core Nucleus, Fresnel Rim, Caustics)
   const colors = {
-    aqua: { outer: '#82f6e7', inner: '#3cc6d1', glow: 'rgba(68,255,228,.6)' },
-    berry: { outer: '#ff9acb', inner: '#ee5d9b', glow: 'rgba(255,95,184,.55)' },
-    lilac: { outer: '#d1b6ff', inner: '#8b74e9', glow: 'rgba(167,119,255,.58)' },
-    sunshine: { outer: '#ffe6a2', inner: '#f5a83f', glow: 'rgba(255,204,89,.56)' }
+    aqua: {
+      outer: '#4ff7e8',
+      inner: '#0992a5',
+      deep: '#03434d',
+      glow: 'rgba(64, 245, 232, 0.75)',
+      core: '#dcfffa',
+      caustic: 'rgba(120, 255, 245, 0.45)',
+      rim: '#a6fffa',
+      highlight: '#ffffff'
+    },
+    berry: {
+      outer: '#ff6ca8',
+      inner: '#c41d68',
+      deep: '#690833',
+      glow: 'rgba(255, 108, 168, 0.75)',
+      core: '#ffe0ed',
+      caustic: 'rgba(255, 160, 205, 0.45)',
+      rim: '#ffbadc',
+      highlight: '#ffffff'
+    },
+    lilac: {
+      outer: '#b395ff',
+      inner: '#6639c7',
+      deep: '#361578',
+      glow: 'rgba(179, 149, 255, 0.75)',
+      core: '#eee5ff',
+      caustic: 'rgba(205, 185, 255, 0.45)',
+      rim: '#dfd2ff',
+      highlight: '#ffffff'
+    },
+    sunshine: {
+      outer: '#ffd359',
+      inner: '#d48806',
+      deep: '#784b00',
+      glow: 'rgba(255, 211, 89, 0.75)',
+      core: '#fff6cc',
+      caustic: 'rgba(255, 230, 138, 0.45)',
+      rim: '#ffedba',
+      highlight: '#ffffff'
+    }
   };
   const TINTS = Object.keys(colors);
   let tint = 'aqua';
@@ -43,9 +80,11 @@
   let time = 0;
   let elapsed = 0;
   let spring = { value: [1, 1, 1], speed: [0, 0, 0], target: [1, 1, 1] };
+  let nucleusLag = { x: 0, y: 0, vx: 0, vy: 0 };
   let platformMap = new Map();
   let particles = [];
   let stars = [];
+  let motes = [];
   let lastFrame = 0;
   let toastTimer = 0;
   let soundMuted = false;
@@ -63,36 +102,49 @@
   }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function mix(a, b, t) { return a + (b - a) * t; }
+
+  // High-Fidelity Perspective Projection with Majestic Focal Curve
   function project(x, y, z) {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const unit = Math.min(width, height) * 0.155;
+    const isLandscape = width > height;
+    const unit = isLandscape ? Math.min(width * 0.14, height * 0.185) : Math.min(width, height) * 0.185;
     const ahead = position.z - z;
-    const depth = clamp(1 - ahead * 0.0125, 0.66, 1.16);
+    const depth = clamp(1 / (1 + ahead * 0.052), 0.35, 1.25);
     const cameraX = position.x * 0.28;
+    const centerY = isLandscape ? height * 0.68 : height * 0.64;
     return {
       x: width * 0.5 + (x - cameraX) * unit * depth,
-      y: height * 0.61 - (y - position.y) * unit * 0.92 - ahead * unit * 0.43,
-      s: unit * depth
+      y: centerY - (y - position.y) * unit * 0.82 - ahead * unit * 0.22,
+      s: unit * depth,
+      depth: depth,
+      ahead: ahead
     };
   }
+
   function platformFor(index) {
     if (platformMap.has(index)) return platformMap.get(index);
     const x = index === 0 ? 0 : Math.sin(index * 1.29) * 0.93 + Math.sin(index * 0.43) * 0.19;
     const y = 0.22 + Math.sin(index * 0.77) * 0.22;
     const p = {
-      index, x, y, z: -index * 4.05, surface: y + 0.20, width: 2.2, depth: 2.3,
-      hazard: index >= 3 && index % 4 === 0, berryCollected: false
+      index, x, y, z: -index * 4.05, surface: y + 0.20, width: 2.35, depth: 2.45,
+      hazard: index >= 3 && index % 4 === 0, berryCollected: false,
+      pulseTime: 0
     };
-    p.spikes = p.hazard ? [{ x: x - 0.50, y: p.surface + 0.30, z: p.z + 0.25 }, { x: x + 0.52, y: p.surface + 0.30, z: p.z - 0.42 }] : [];
-    if (index > 0) p.berry = { x: x + 0.18, y: p.surface + 0.78, z: p.z + 0.05 };
+    p.spikes = p.hazard ? [
+      { x: x - 0.52, y: p.surface + 0.32, z: p.z + 0.26 },
+      { x: x + 0.52, y: p.surface + 0.32, z: p.z - 0.42 }
+    ] : [];
+    if (index > 0) p.berry = { x: x + 0.18, y: p.surface + 0.82, z: p.z + 0.05 };
     platformMap.set(index, p);
     return p;
   }
+
   function ensurePlatforms() {
-    for (let i = 0; i <= currentPlatformIndex + 4; i++) platformFor(i);
+    for (let i = 0; i <= currentPlatformIndex + 5; i++) platformFor(i);
     for (const i of platformMap.keys()) if (i < currentPlatformIndex - 2) platformMap.delete(i);
   }
+
   function resetWorld() {
     platformMap.clear();
     currentPlatformIndex = 0;
@@ -102,16 +154,19 @@
     velocity = { x: 0, y: 0, z: 0 };
     oldY = position.y;
     spring = { value: [1, 1, 1], speed: [0, 0, 0], target: [1, 1, 1] };
+    nucleusLag = { x: 0, y: 0, vx: 0, vy: 0 };
     particles = [];
     jellyPopped = false;
     ensurePlatforms();
     updateStats();
   }
+
   function updateStats() {
     $('level-value').textContent = String(currentPlatformIndex + 1).padStart(2, '0');
     $('berry-value').textContent = String(berries).padStart(3, '0');
     $('best-value').textContent = String(best).padStart(2, '0');
   }
+
   function setState(next) {
     state = next;
     if (!started) return;
@@ -136,12 +191,14 @@
       $('leaderboard-button').hidden = true;
     }
   }
+
   function showToast(message) {
     $('toast').textContent = message;
     $('toast').classList.add('visible');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 1500);
+    toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 1600);
   }
+
   function chooseTint(value) {
     if (!TINTS.includes(value)) return;
     tint = value;
@@ -151,8 +208,9 @@
       button.setAttribute('aria-pressed', String(selected));
     });
     persist();
-    showToast(`${tint.toUpperCase()} JELLY EQUIPPED`);
+    showToast(tint.toUpperCase() + ' JELLY EQUIPPED');
   }
+
   function startGame() {
     if (state === 'gameover') resetWorld();
     started = true;
@@ -165,6 +223,7 @@
     setState('idle');
     unlockAudio();
   }
+
   function pauseGame() {
     if (state === 'paused') {
       setState(pausePrevious === 'aiming' ? 'idle' : pausePrevious);
@@ -179,36 +238,82 @@
     setState('paused');
     if (audioContext && audioContext.state === 'running') audioContext.suspend().catch(() => undefined);
   }
+
   function unlockAudio() {
     if (soundMuted) return;
     try {
-      if (!audioContext) audioContext = new AudioContext({ latencyHint: 'interactive' });
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
       if (audioContext.state === 'suspended') audioContext.resume().catch(() => undefined);
     } catch { /* Audio is optional. */ }
   }
+
+  // Multi-Oscillator Organic Sound Synthesis (FM Squelch + Sub-Bass Impact + Chimes)
   function boing(power = 0.5, impact = false) {
     if (soundMuted || !audioContext || audioContext.state !== 'running') return;
     try {
       const now = audioContext.currentTime;
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      const freq = (impact ? 230 : 310) + clamp(power, 0, 1) * 170;
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(freq * (impact ? 1.4 : 1.7), now);
-      oscillator.frequency.exponentialRampToValueAtTime(freq * 0.5, now + (impact ? 0.18 : 0.24));
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(impact ? 0.1 : 0.07, now + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.27);
-      oscillator.connect(gain).connect(audioContext.destination);
-      oscillator.start(now); oscillator.stop(now + 0.29);
-      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      const mainOsc = audioContext.createOscillator();
+      const subOsc = audioContext.createOscillator();
+      const mainGain = audioContext.createGain();
+      const subGain = audioContext.createGain();
+      const p = clamp(power, 0, 1);
+
+      // Primary Volumetric Squelch
+      const baseFreq = impact ? 240 + p * 80 : 320 + p * 190;
+      mainOsc.type = 'sine';
+      mainOsc.frequency.setValueAtTime(baseFreq * (impact ? 1.5 : 1.8), now);
+      mainOsc.frequency.exponentialRampToValueAtTime(baseFreq * 0.42, now + (impact ? 0.22 : 0.26));
+      mainGain.gain.setValueAtTime(0.0001, now);
+      mainGain.gain.exponentialRampToValueAtTime(impact ? 0.14 : 0.09, now + 0.015);
+      mainGain.gain.exponentialRampToValueAtTime(0.0001, now + (impact ? 0.24 : 0.28));
+
+      mainOsc.connect(mainGain).connect(audioContext.destination);
+      mainOsc.start(now);
+      mainOsc.stop(now + 0.30);
+      mainOsc.onended = () => { mainOsc.disconnect(); mainGain.disconnect(); };
+
+      // Impact Physical Sub-Bass Punch & Resonant Body Thud
+      if (impact) {
+        subOsc.type = 'triangle';
+        subOsc.frequency.setValueAtTime(75, now);
+        subOsc.frequency.exponentialRampToValueAtTime(32, now + 0.18);
+        subGain.gain.setValueAtTime(0.0001, now);
+        subGain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+        subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        subOsc.connect(subGain).connect(audioContext.destination);
+        subOsc.start(now);
+        subOsc.stop(now + 0.24);
+        subOsc.onended = () => { subOsc.disconnect(); subGain.disconnect(); };
+      }
     } catch { /* Audio failures never block gameplay. */ }
   }
+
+  function chimeBerry() {
+    if (soundMuted || !audioContext || audioContext.state !== 'running') return;
+    try {
+      const now = audioContext.currentTime;
+      [880, 1174.66, 1396.91].forEach((freq, idx) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+        gain.gain.setValueAtTime(0.0001, now + idx * 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.07, now + idx * 0.04 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.04 + 0.28);
+        osc.connect(gain).connect(audioContext.destination);
+        osc.start(now + idx * 0.04);
+        osc.stop(now + idx * 0.04 + 0.30);
+        osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+      });
+    } catch { /* optional */ }
+  }
+
   function haptic() {
     if (navigator.userActivation && navigator.userActivation.hasBeenActive && typeof navigator.vibrate === 'function') {
-      try { navigator.vibrate(25); } catch { /* Unsupported in some browsers. */ }
+      try { navigator.vibrate(28); } catch { /* Unsupported in some browsers. */ }
     }
   }
+
   function launchFromPull() {
     const start = pull.start || { x: 0, y: 0 };
     const current = pull.current || start;
@@ -227,21 +332,22 @@
       const gx = -dx / len; const gz = -dy / len;
       const tx = next.x - position.x; const tz = next.z - position.z;
       const targetLen = Math.hypot(tx, tz) || 1;
-      let mx = gx * 0.79 + (tx / targetLen) * 0.21;
-      let mz = gz * 0.79 + (tz / targetLen) * 0.21;
+      let mx = gx * 0.81 + (tx / targetLen) * 0.19;
+      let mz = gz * 0.81 + (tz / targetLen) * 0.19;
       const m = Math.hypot(mx, mz) || 1;
       dirX = mx / m; dirZ = mz / m;
     }
     const minDim = Math.max(1, Math.min(innerWidth, innerHeight));
-    const power = distance < 12 ? 0.27 : clamp(distance / (minDim * 0.48), 0.08, 1);
+    const power = distance < 12 ? 0.28 : clamp(distance / (minDim * 0.46), 0.08, 1);
     const speed = 4.65 + power * 2.55;
     velocity = { x: dirX * speed, y: 8.25, z: dirZ * speed };
     elapsed = 0; oldY = position.y; pull.start = null; pull.current = null; active = true;
-    spring.target = [1.26, 0.65, 0.78];
+    spring.target = [1.28, 0.62, 0.76];
     setState('flying');
     boing(power, false);
     $('avatar-reaction').textContent = '😵‍💫';
   }
+
   function updateAim() {
     const current = pull.current || pull.start;
     if (!current || !pull.start) return;
@@ -250,13 +356,14 @@
     const distance = Math.hypot(dx, dy);
     pull.length = distance;
     const minDim = Math.max(1, Math.min(innerWidth, innerHeight));
-    const ratio = clamp(distance / (minDim * 0.48), 0, 1);
-    spring.target = [1 + ratio * 0.34, 1 - ratio * 0.24, 1 + ratio * 0.1];
+    const ratio = clamp(distance / (minDim * 0.46), 0, 1);
+    spring.target = [1 + ratio * 0.36, 1 - ratio * 0.28, 1 + ratio * 0.12];
     $('avatar-widget').classList.toggle('is-panicking', ratio > 0.14);
     $('avatar-reaction').textContent = ratio > 0.55 ? '😱' : ratio > 0.14 ? '😳' : '✦';
     $('avatar-mood').textContent = ratio > 0.55 ? 'TOO MUCH SQUISH!' : ratio > 0.14 ? 'HOLD ON!!' : 'Ready to wobble';
     $('avatar-name').textContent = ratio > 0.14 ? 'PANIC MODE' : 'SQUISH MODE';
   }
+
   function setPanic(panicking, pullRatio = 0) {
     $('avatar-widget').classList.toggle('is-panicking', panicking);
     $('avatar-reaction').textContent = panicking ? (pullRatio > 0.55 ? '😱' : '😳') : '✦';
@@ -272,22 +379,25 @@
     pull.length = 0;
     try { canvas.setPointerCapture(event.pointerId); } catch { /* optional */ }
     setState('aiming');
-    spring.target = [1.04, 0.94, 1];
+    spring.target = [1.05, 0.93, 1];
     updateAim();
     unlockAudio();
   }, { passive: false });
+
   canvas.addEventListener('pointermove', (event) => {
     if (!pull.start || state !== 'aiming' || hidden) return;
     event.preventDefault();
     pull.current = { x: event.clientX, y: event.clientY };
     updateAim();
   }, { passive: false });
+
   canvas.addEventListener('pointerup', (event) => {
     if (!pull.start || state !== 'aiming' || hidden) return;
     event.preventDefault();
     pull.current = { x: event.clientX, y: event.clientY };
     launchFromPull();
   }, { passive: false });
+
   canvas.addEventListener('pointercancel', () => {
     pull.start = null; pull.current = null;
     if (state === 'aiming') { setState('idle'); spring.target = [1, 1, 1]; setPanic(false); }
@@ -301,23 +411,25 @@
     position.x += velocity.x * dt;
     position.y += velocity.y * dt;
     position.z += velocity.z * dt;
-    if (elapsed < 0.2) spring.target = [1.2, 0.72, 0.82];
-    else if (elapsed < 0.46) spring.target = [0.83, 1.28, 0.82];
-    else spring.target = [0.96, 1.02, 0.94];
+    if (elapsed < 0.20) spring.target = [1.22, 0.70, 0.80];
+    else if (elapsed < 0.48) spring.target = [0.82, 1.30, 0.80];
+    else spring.target = [0.95, 1.04, 0.94];
     if (checkSpikeHit()) { popJelly(); return; }
     collectBerries();
     if (velocity.y <= 0 && landIfPossible()) return;
     if (position.y < -5.9 || elapsed > 2.3) popJelly();
   }
+
   function checkSpikeHit() {
     for (const p of platformMap.values()) {
       if (!p.hazard) continue;
       for (const s of p.spikes) {
-        if (Math.abs(position.x - s.x) < 0.42 && Math.abs(position.z - s.z) < 0.43 && position.y - s.y > -0.35 && position.y - s.y < 0.76) return true;
+        if (Math.abs(position.x - s.x) < 0.44 && Math.abs(position.z - s.z) < 0.45 && position.y - s.y > -0.35 && position.y - s.y < 0.78) return true;
       }
     }
     return false;
   }
+
   function landIfPossible() {
     const platforms = Array.from(platformMap.values()).sort((a, b) => a.index - b.index);
     for (const p of platforms) {
@@ -331,222 +443,741 @@
       position = { x: p.x, y: landY, z: p.z };
       velocity = { x: 0, y: 0, z: 0 };
       currentPlatformIndex = p.index;
+      p.pulseTime = time;
       if (progressed) {
         levelsCleared += p.index - previous;
         ensurePlatforms();
         showToast(p.hazard ? 'CLEAN LANDING! WATCH THOSE SPIKES' : 'JUICY LANDING! +1 LEVEL');
       } else showToast('NICE SAVE — LINE UP THE NEXT BOUNCE');
-      spring.target = [1.28, 0.57, 1.08];
+      spring.target = [1.32, 0.52, 1.10];
       setState('idle');
       setPanic(false);
-      boing(0.72, true); haptic();
+      boing(0.75, true); haptic();
       updateStats(); collectBerries();
       elapsed = 0;
       return true;
     }
     return false;
   }
+
   function collectBerries() {
     for (const p of platformMap.values()) {
       if (!p.berry || p.berryCollected) continue;
       const bx = p.berry.x, by = p.berry.y, bz = p.berry.z;
-      if ((position.x - bx) ** 2 + (position.y - by) ** 2 + (position.z - bz) ** 2 < 0.72 ** 2) {
+      if ((position.x - bx) ** 2 + (position.y - by) ** 2 + (position.z - bz) ** 2 < 0.75 ** 2) {
         p.berryCollected = true;
         berries += 1;
         persist(); updateStats(); showToast('+1 JUICY BERRY');
+        chimeBerry();
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const s = 1.2 + Math.random() * 2.4;
+          particles.push({
+            x: bx, y: by, z: bz,
+            vx: Math.cos(a) * s, vy: 1.5 + Math.random() * 2, vz: Math.sin(a) * s,
+            life: 0.8 + Math.random() * 0.4, tint: 'sunshine'
+          });
+        }
       }
     }
   }
+
   function popJelly() {
     if (state !== 'flying') return;
     active = false;
     jellyPopped = true;
     setPanic(true, 1);
-    boing(0.72, true); haptic();
-    for (let i = 0; i < 18; i++) {
-      const angle = Math.PI * 2 * i / 18 + Math.random() * 0.22;
-      const speed = 1 + Math.random() * 3.2;
-      particles.push({ x: position.x, y: position.y, z: position.z, vx: Math.cos(angle) * speed, vy: 1.1 + Math.random() * 4.1, vz: Math.sin(angle) * speed, life: .9 + Math.random() * .35 });
+    boing(0.85, true); haptic();
+    for (let i = 0; i < 24; i++) {
+      const angle = Math.PI * 2 * i / 24 + Math.random() * 0.24;
+      const speed = 1.2 + Math.random() * 3.8;
+      particles.push({
+        x: position.x, y: position.y, z: position.z,
+        vx: Math.cos(angle) * speed, vy: 1.4 + Math.random() * 4.4, vz: Math.sin(angle) * speed,
+        life: 0.9 + Math.random() * 0.45, tint: tint
+      });
     }
     best = Math.max(best, levelsCleared);
     persist(); updateStats(); setState('gameover');
-    showToast(levelsCleared > 0 ? `RUN COMPLETE • ${levelsCleared} LEVELS CLEARED` : 'THE JELLY HAS LEFT THE CHAT');
+    showToast(levelsCleared > 0 ? ('RUN COMPLETE • ' + levelsCleared + ' LEVELS CLEARED') : 'THE JELLY HAS LEFT THE CHAT');
   }
+
   function updateSpring(dt) {
-    const damping = .65;
-    const omega = 2 * Math.PI / .38;
+    const damping = 0.65;
+    const omega = 2 * Math.PI / 0.38;
     for (let i = 0; i < 3; i++) {
       const acceleration = (spring.target[i] - spring.value[i]) * omega * omega - 2 * damping * omega * spring.speed[i];
       spring.speed[i] += acceleration * dt;
       spring.value[i] += spring.speed[i] * dt;
     }
+    // Viscous inner nucleus secondary lag spring
+    const nTargetX = clamp(-velocity.x * 0.05, -12, 12);
+    const nTargetY = clamp(-velocity.y * 0.04, -14, 14);
+    nucleusLag.vx += (nTargetX - nucleusLag.x) * 120 * dt - 12 * nucleusLag.vx * dt;
+    nucleusLag.vy += (nTargetY - nucleusLag.y) * 120 * dt - 12 * nucleusLag.vy * dt;
+    nucleusLag.x += nucleusLag.vx * dt;
+    nucleusLag.y += nucleusLag.vy * dt;
   }
+
   function updateParticles(dt) {
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
-      p.life -= dt; p.vy -= 17.2 * .55 * dt;
+      p.life -= dt; p.vy -= 17.2 * 0.55 * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       if (p.life <= 0) particles.splice(i, 1);
     }
+    // Ambient dust motes drift
+    for (const m of motes) {
+      m.y += m.vy * dt;
+      m.x += m.vx * dt;
+      if (m.y < 0) m.y = 1;
+      if (m.y > 1) m.y = 0;
+      if (m.x < 0) m.x = 1;
+      if (m.x > 1) m.x = 0;
+    }
   }
 
+  // 8K Cosmic Nebula Environment with Celestial Gas Giant & Parallax Stars
   function drawBackground(w, h) {
-    const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, '#171b49'); bg.addColorStop(.42, '#151943'); bg.addColorStop(1, '#080b21');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    let glow = ctx.createRadialGradient(w * .18, h * .39, 2, w * .18, h * .39, w * .67);
-    glow.addColorStop(0, 'rgba(107,72,203,.24)'); glow.addColorStop(1, 'rgba(107,72,203,0)');
-    ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
-    glow = ctx.createRadialGradient(w * .85, h * .42, 2, w * .85, h * .42, w * .55);
-    glow.addColorStop(0, 'rgba(43,206,203,.15)'); glow.addColorStop(1, 'rgba(43,206,203,0)');
-    ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+    // Deep Space Base
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, '#050716');
+    bg.addColorStop(0.45, '#090d29');
+    bg.addColorStop(1, '#040612');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    // Multi-Layer Volumetric Cosmic Nebulae
+    let neb1 = ctx.createRadialGradient(w * 0.22, h * 0.35, 10, w * 0.22, h * 0.35, w * 0.65);
+    neb1.addColorStop(0, 'rgba(118, 64, 230, 0.26)');
+    neb1.addColorStop(0.5, 'rgba(84, 40, 185, 0.11)');
+    neb1.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = neb1; ctx.fillRect(0, 0, w, h);
+
+    let neb2 = ctx.createRadialGradient(w * 0.82, h * 0.40, 10, w * 0.82, h * 0.40, w * 0.58);
+    neb2.addColorStop(0, 'rgba(32, 222, 212, 0.22)');
+    neb2.addColorStop(0.5, 'rgba(20, 150, 165, 0.08)');
+    neb2.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = neb2; ctx.fillRect(0, 0, w, h);
+
+    let neb3 = ctx.createRadialGradient(w * 0.50, h * 0.72, 10, w * 0.50, h * 0.72, w * 0.55);
+    neb3.addColorStop(0, 'rgba(255, 75, 155, 0.15)');
+    neb3.addColorStop(0.6, 'rgba(160, 30, 110, 0.05)');
+    neb3.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = neb3; ctx.fillRect(0, 0, w, h);
+
+    // Distant Celestial Gas Giant with Atmospheric Rim & Faint Rings
+    const planetX = w * 0.84, planetY = h * 0.22, planetR = Math.min(w, h) * 0.13;
+    ctx.save();
+    // Atmospheric Glow
+    let planetAtm = ctx.createRadialGradient(planetX, planetY, planetR * 0.9, planetX, planetY, planetR * 1.35);
+    planetAtm.addColorStop(0, 'rgba(64, 245, 232, 0.35)');
+    planetAtm.addColorStop(0.5, 'rgba(120, 140, 255, 0.12)');
+    planetAtm.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = planetAtm;
+    ctx.beginPath(); ctx.arc(planetX, planetY, planetR * 1.35, 0, Math.PI * 2); ctx.fill();
+
+    // Planet Body with Terminator Shading
+    let planetBody = ctx.createRadialGradient(planetX - planetR * 0.4, planetY - planetR * 0.35, 2, planetX, planetY, planetR);
+    planetBody.addColorStop(0, '#5878d6');
+    planetBody.addColorStop(0.45, '#2c3e8c');
+    planetBody.addColorStop(0.85, '#121945');
+    planetBody.addColorStop(1, '#050718');
+    ctx.fillStyle = planetBody;
+    ctx.beginPath(); ctx.arc(planetX, planetY, planetR, 0, Math.PI * 2); ctx.fill();
+
+    // Planet Rings in Depth Blur
+    ctx.beginPath();
+    ctx.ellipse(planetX, planetY, planetR * 2.1, planetR * 0.42, -0.28, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(180, 220, 255, 0.18)';
+    ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(planetX, planetY, planetR * 1.75, planetR * 0.35, -0.28, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(140, 180, 255, 0.10)';
+    ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+
+    // Parallax Starfield with Cross-Diffraction Spikes on Bright Stars
     ctx.save();
     for (const star of stars) {
-      const twinkle = .24 + .42 * (Math.sin(time * star.speed + star.phase) * .5 + .5);
+      const twinkle = 0.30 + 0.45 * (Math.sin(time * star.speed + star.phase) * 0.5 + 0.5);
       ctx.globalAlpha = twinkle;
       ctx.fillStyle = star.color;
-      ctx.beginPath(); ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cross Diffraction Spikes on Hero Stars
+      if (star.hero) {
+        ctx.strokeStyle = star.color;
+        ctx.lineWidth = 0.75;
+        const sLen = star.r * 5.5;
+        ctx.beginPath();
+        ctx.moveTo(star.x * w - sLen, star.y * h); ctx.lineTo(star.x * w + sLen, star.y * h);
+        ctx.moveTo(star.x * w, star.y * h - sLen); ctx.lineTo(star.x * w, star.y * h + sLen);
+        ctx.stroke();
+      }
+    }
+    // Atmospheric Dust Motes
+    for (const m of motes) {
+      const mAlpha = 0.15 + 0.22 * Math.sin(time * m.speed + m.phase);
+      ctx.globalAlpha = mAlpha;
+      ctx.fillStyle = m.color;
+      ctx.beginPath();
+      ctx.arc(m.x * w, m.y * h, m.r, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }
+
+  // PBR Chamfered Monoliths with Holographic Runways & Ambient Glass Occlusion
   function drawPlatform(p) {
     const halfW = p.width / 2, halfD = p.depth / 2;
     const corners = [
-      project(p.x - halfW, p.surface, p.z - halfD),
-      project(p.x + halfW, p.surface, p.z - halfD),
-      project(p.x + halfW, p.surface, p.z + halfD),
-      project(p.x - halfW, p.surface, p.z + halfD)
+      project(p.x - halfW, p.surface, p.z - halfD), // 0: back-left
+      project(p.x + halfW, p.surface, p.z - halfD), // 1: back-right
+      project(p.x + halfW, p.surface, p.z + halfD), // 2: front-right
+      project(p.x - halfW, p.surface, p.z + halfD)  // 3: front-left
     ];
-    const extrusion = 13 * (corners.reduce((sum, c) => sum + c.s, 0) / corners.length) / (Math.min(innerWidth, innerHeight) * .155);
+
+    // Deep Monolithic Slab Extrusion
+    const extrusion = clamp(36 * p.depth, 14, 48);
+
     ctx.save();
-    // Under-platform bloom and the dark beveled side wall.
-    ctx.shadowColor = p.hazard ? 'rgba(255,70,125,.30)' : 'rgba(71,247,224,.32)';
-    ctx.shadowBlur = 19;
-    ctx.fillStyle = 'rgba(13,23,59,.96)';
-    path(corners); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.beginPath(); ctx.moveTo(corners[3].x, corners[3].y); ctx.lineTo(corners[2].x, corners[2].y); ctx.lineTo(corners[2].x, corners[2].y + extrusion); ctx.lineTo(corners[3].x, corners[3].y + extrusion); ctx.closePath();
-    const side = ctx.createLinearGradient(corners[3].x, corners[3].y, corners[3].x, corners[3].y + extrusion);
-    side.addColorStop(0, '#14364e'); side.addColorStop(1, '#111a39'); ctx.fillStyle = side; ctx.fill();
-    ctx.beginPath(); ctx.moveTo(corners[2].x, corners[2].y); ctx.lineTo(corners[1].x, corners[1].y); ctx.lineTo(corners[1].x, corners[1].y + extrusion); ctx.lineTo(corners[2].x, corners[2].y + extrusion); ctx.closePath();
-    ctx.fillStyle = '#0b1536'; ctx.fill();
+
+    // 1. Volumetric Underglow & Colored Light Spill into the Cosmic Void
+    const centerBase = project(p.x, p.surface - 0.2, p.z);
+    const underGlow = ctx.createRadialGradient(
+      centerBase.x, centerBase.y + extrusion, 2,
+      centerBase.x, centerBase.y + extrusion, p.s * 1.5
+    );
+    underGlow.addColorStop(0, p.hazard ? 'rgba(255, 45, 105, 0.40)' : 'rgba(40, 245, 230, 0.30)');
+    underGlow.addColorStop(0.5, p.hazard ? 'rgba(255, 45, 105, 0.10)' : 'rgba(40, 245, 230, 0.08)');
+    underGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = underGlow;
+    ctx.fillRect(centerBase.x - p.s * 1.5, centerBase.y + extrusion - p.s * 0.75, p.s * 3.0, p.s * 1.5);
+
+    // 2. Front Monolith Face (Dark Sapphire Obsidian with Glowing Quantum Conduits)
+    const frontWall = ctx.createLinearGradient(corners[3].x, corners[3].y, corners[3].x, corners[3].y + extrusion);
+    frontWall.addColorStop(0, '#152549');
+    frontWall.addColorStop(0.55, '#0b162f');
+    frontWall.addColorStop(1, '#050a17');
+    ctx.fillStyle = frontWall;
+    ctx.beginPath();
+    ctx.moveTo(corners[3].x, corners[3].y);
+    ctx.lineTo(corners[2].x, corners[2].y);
+    ctx.lineTo(corners[2].x, corners[2].y + extrusion);
+    ctx.lineTo(corners[3].x, corners[3].y + extrusion);
+    ctx.closePath();
+    ctx.fill();
+
+    // Vertical Quantum Light Conduits on Front Wall
+    const conduitColor = p.hazard ? 'rgba(255, 80, 140, 0.65)' : 'rgba(64, 245, 232, 0.55)';
+    ctx.strokeStyle = conduitColor;
+    ctx.lineWidth = 1.2;
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      const tx = mix(corners[3].x, corners[2].x, t);
+      const ty = mix(corners[3].y, corners[2].y, t);
+      ctx.beginPath();
+      ctx.moveTo(tx, ty + 2);
+      ctx.lineTo(tx, ty + extrusion * 0.85);
+      ctx.stroke();
+    }
+
+    // 3. Side Monolith Face
+    if (corners[2].x > corners[1].x) {
+      const sideWall = ctx.createLinearGradient(corners[2].x, corners[2].y, corners[1].x, corners[1].y);
+      sideWall.addColorStop(0, '#0e1a38');
+      sideWall.addColorStop(1, '#060c1c');
+      ctx.fillStyle = sideWall;
+      ctx.beginPath();
+      ctx.moveTo(corners[2].x, corners[2].y);
+      ctx.lineTo(corners[1].x, corners[1].y);
+      ctx.lineTo(corners[1].x, corners[1].y + extrusion);
+      ctx.lineTo(corners[2].x, corners[2].y + extrusion);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 4. Chamfered Top Face (PBR Frosted Optical Glass)
+    const topGrad = ctx.createLinearGradient(corners[0].x, corners[0].y, corners[2].x, corners[2].y);
+    if (p.hazard) {
+      topGrad.addColorStop(0, '#751a42');
+      topGrad.addColorStop(0.45, '#450d24');
+      topGrad.addColorStop(1, '#250412');
+    } else {
+      topGrad.addColorStop(0, '#285888');
+      topGrad.addColorStop(0.45, '#163b61');
+      topGrad.addColorStop(1, '#0e243d');
+    }
+    ctx.fillStyle = topGrad;
     path(corners);
-    const topGradient = ctx.createLinearGradient(corners[0].x, corners[0].y, corners[2].x, corners[2].y);
-    topGradient.addColorStop(0, '#244e79'); topGradient.addColorStop(.45, '#163c61'); topGradient.addColorStop(1, '#122c4c');
-    ctx.fillStyle = topGradient; ctx.fill();
-    ctx.lineWidth = 1.25; ctx.strokeStyle = p.hazard ? 'rgba(255,112,154,.98)' : 'rgba(124,250,230,.92)'; ctx.shadowColor = p.hazard ? '#ff4e87' : '#53f5dc'; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0;
-    // Glassy runway rings and top-facing seams.
-    const c = project(p.x, p.surface + .04, p.z);
-    ctx.beginPath(); ctx.ellipse(c.x, c.y, c.s * .72, c.s * .31, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = p.hazard ? 'rgba(255,115,155,.45)' : 'rgba(112,255,230,.38)'; ctx.lineWidth = 1.4; ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(c.x, c.y, c.s * .48, c.s * .21, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(189,249,255,.17)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fill();
+
+    // Razor-Sharp Front Bevel Highlight
+    ctx.beginPath();
+    ctx.moveTo(corners[3].x, corners[3].y);
+    ctx.lineTo(corners[2].x, corners[2].y);
+    ctx.strokeStyle = p.hazard ? 'rgba(255, 140, 185, 0.95)' : 'rgba(175, 255, 248, 0.95)';
+    ctx.shadowColor = p.hazard ? '#ff2e75' : '#40f5e8';
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Outer Perimeter Chamfer Stroke
+    ctx.strokeStyle = p.hazard ? 'rgba(255, 80, 130, 0.85)' : 'rgba(90, 235, 225, 0.75)';
+    ctx.lineWidth = 1.2;
+    path(corners);
+    ctx.stroke();
+
+    // 5. Holographic Runway Rings & Directional Chevrons
+    const c = project(p.x, p.surface + 0.02, p.z);
+    const isTarget = p.index === currentPlatformIndex + 1;
+    const ringPulse = isTarget ? (0.6 + 0.4 * Math.sin(time * 4)) : 0.4;
+
+    // Outer Laser Ring
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, c.s * 0.72, c.s * 0.31, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = p.hazard ? ('rgba(255, 90, 140, ' + ringPulse + ')') : ('rgba(64, 245, 232, ' + ringPulse + ')');
+    ctx.lineWidth = isTarget ? 1.8 : 1.2;
+    if (isTarget) { ctx.shadowColor = '#40f5e8'; ctx.shadowBlur = 8; }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Inner Core Target Reticle
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, c.s * 0.46, c.s * 0.20, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Hazard Stripes & Caution Decals
+    if (p.hazard) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 55, 110, 0.38)';
+      ctx.lineWidth = 2.2;
+      for (let s = -1; s <= 1; s += 0.6) {
+        const hx = c.x + s * c.s * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(hx - 8, c.y - c.s * 0.12);
+        ctx.lineTo(hx + 8, c.y + c.s * 0.12);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 6. Dynamic Light Bounce from Jelly
+    const distZ = Math.abs(position.z - p.z);
+    const distX = Math.abs(position.x - p.x);
+    const distY = position.y - p.surface;
+    if (distZ < 2.5 && distX < 2.5 && distY > 0 && distY < 2.8) {
+      const jSpot = project(position.x, p.surface + 0.02, position.z);
+      const intensity = clamp(1 - distY / 2.8, 0, 1);
+      const poolR = p.s * 0.65 * (0.8 + distY * 0.3);
+      const pool = ctx.createRadialGradient(jSpot.x, jSpot.y, 1, jSpot.x, jSpot.y, poolR);
+      pool.addColorStop(0, colors[tint].glow.replace(/[\d\.]+\)$/, (0.45 * intensity) + ')'));
+      pool.addColorStop(0.6, colors[tint].glow.replace(/[\d\.]+\)$/, (0.12 * intensity) + ')'));
+      pool.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = pool;
+      ctx.beginPath();
+      ctx.ellipse(jSpot.x, jSpot.y, poolR, poolR * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 7. Atmospheric Distance Fog Falloff
+    if (p.depth < 0.82) {
+      const fogAlpha = clamp((0.82 - p.depth) * 1.8, 0, 0.65);
+      ctx.fillStyle = 'rgba(6, 8, 22, ' + fogAlpha + ')';
+      path(corners);
+      ctx.fill();
+    }
+
     ctx.restore();
+
     if (p.hazard) p.spikes.forEach(drawSpike);
     if (p.berry && !p.berryCollected) {
-      const bob = prefersReducedMotion ? 0 : Math.sin(time * 2.2 + p.index) * .08;
+      const bob = prefersReducedMotion ? 0 : Math.sin(time * 2.2 + p.index) * 0.08;
       const berry = project(p.berry.x, p.berry.y + bob, p.berry.z);
       drawBerry(berry, p.index);
     }
   }
+
+  // 3D Faceted Crystal Spikes with Internal Magma/Neon Core & Crackling Sparks
   function drawSpike(s) {
-    const base = project(s.x, s.y - .31, s.z), top = project(s.x, s.y + .38, s.z), left = project(s.x - .23, s.y - .31, s.z + .1), right = project(s.x + .23, s.y - .31, s.z + .1);
-    ctx.save(); ctx.shadowColor = 'rgba(255,66,124,.9)'; ctx.shadowBlur = 12;
-    const g = ctx.createLinearGradient(top.x, top.y, base.x, base.y); g.addColorStop(0, '#ffe0f0'); g.addColorStop(.2, '#ff79ad'); g.addColorStop(1, '#e33475');
-    ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(right.x, right.y); ctx.lineTo(base.x, base.y); ctx.lineTo(left.x, left.y); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,222,240,.8)'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.restore();
-  }
-  function drawBerry(p, phase) {
-    const bob = Math.sin(time * 2 + phase) * 1.8;
-    const r = Math.max(6, p.s * .19);
+    const base = project(s.x, s.y - 0.32, s.z);
+    const top = project(s.x, s.y + 0.44, s.z);
+    const left = project(s.x - 0.26, s.y - 0.32, s.z + 0.12);
+    const right = project(s.x + 0.26, s.y - 0.32, s.z + 0.12);
+    const centerBase = project(s.x, s.y - 0.32, s.z + 0.24);
+
     ctx.save();
-    ctx.globalAlpha = .55; ctx.strokeStyle = '#ff8dbf'; ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.ellipse(p.x, p.y + bob, r * 1.55, r * .55, time * .5, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.shadowColor = '#ffba69'; ctx.shadowBlur = 20;
-    const grad = ctx.createRadialGradient(p.x - r * .3, p.y - r * .45 + bob, 1, p.x, p.y + bob, r * 1.45);
-    grad.addColorStop(0, '#fffbd3'); grad.addColorStop(.28, '#ffe6a1'); grad.addColorStop(.68, '#ffbd6c'); grad.addColorStop(1, '#ff739e');
-    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(p.x, p.y + bob, r, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.arc(p.x - r * .3, p.y - r * .35 + bob, r * .19, 0, Math.PI * 2); ctx.fill();
+    // Warning Aura & Ground Decal
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y, base.s * 0.28, base.s * 0.11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 35, 95, 0.28)';
+    ctx.fill();
+
+    // Facet A: Left Key-Lit Face
+    const gLeft = ctx.createLinearGradient(top.x, top.y, left.x, left.y);
+    gLeft.addColorStop(0, '#ffffff');
+    gLeft.addColorStop(0.25, '#ff80af');
+    gLeft.addColorStop(1, '#d8155d');
+    ctx.fillStyle = gLeft;
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y); ctx.lineTo(left.x, left.y); ctx.lineTo(centerBase.x, centerBase.y); ctx.closePath();
+    ctx.fill();
+
+    // Facet B: Right Shadow Face
+    const gRight = ctx.createLinearGradient(top.x, top.y, right.x, right.y);
+    gRight.addColorStop(0, '#ff99be');
+    gRight.addColorStop(0.35, '#a6083e');
+    gRight.addColorStop(1, '#59001e');
+    ctx.fillStyle = gRight;
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y); ctx.lineTo(centerBase.x, centerBase.y); ctx.lineTo(right.x, right.y); ctx.closePath();
+    ctx.fill();
+
+    // Sharp Specular Ridge Line & Apex Glint
+    ctx.strokeStyle = 'rgba(255, 235, 245, 0.95)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y); ctx.lineTo(centerBase.x, centerBase.y);
+    ctx.stroke();
+
+    // Apex Lens Glow
+    ctx.shadowColor = '#ff2a70';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(top.x, top.y, 2.2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
+
+  // 3D Rotating Prismatic Star Berry with Orbital Rings & Stardust Embers
+  function drawBerry(p, phase) {
+    const bob = Math.sin(time * 2.2 + phase) * 2.2;
+    const r = Math.max(7, p.s * 0.22);
+    const rot = time * 2.4 + phase;
+
+    ctx.save();
+    // Golden Halo Aura
+    const aura = ctx.createRadialGradient(p.x, p.y + bob, 2, p.x, p.y + bob, r * 2.4);
+    aura.addColorStop(0, 'rgba(255, 235, 120, 0.55)');
+    aura.addColorStop(0.5, 'rgba(255, 120, 160, 0.20)');
+    aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(p.x, p.y + bob, r * 2.4, 0, Math.PI * 2); ctx.fill();
+
+    // Dual Spinning Celestial Gyroscope Rings
+    ctx.strokeStyle = 'rgba(255, 215, 100, 0.65)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + bob, r * 1.65, r * 0.55, rot * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(64, 245, 232, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + bob, r * 1.45, r * 0.48, -rot * 0.8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 3D Faceted Diamond Crystal Body
+    const grad = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.42 + bob, 1, p.x, p.y + bob, r * 1.35);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.22, '#fff4b8');
+    grad.addColorStop(0.62, '#ffae52');
+    grad.addColorStop(1, '#ff4785');
+    ctx.shadowColor = '#ffa642';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y + bob, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Specular Lens Sparkle Glint
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.beginPath();
+    ctx.arc(p.x - r * 0.32, p.y - r * 0.36 + bob, r * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pulsing 4-Point Star Flare
+    const flareLen = r * 1.5 * (0.8 + 0.25 * Math.sin(rot * 2));
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(p.x - flareLen, p.y + bob); ctx.lineTo(p.x + flareLen, p.y + bob);
+    ctx.moveTo(p.x, p.y + bob - flareLen); ctx.lineTo(p.x, p.y + bob + flareLen);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Laser Trajectory Arc with Sequential Holographic Energy Nodes & Landing Reticle
   function drawTrajectory() {
     if (state !== 'aiming' || !pull.start || !pull.current) return;
     const dx = pull.current.x - pull.start.x, dy = pull.current.y - pull.start.y;
-    const distance = Math.hypot(dx, dy), target = platformFor(currentPlatformIndex + 1), from = platformFor(currentPlatformIndex);
+    const distance = Math.hypot(dx, dy);
+    const target = platformFor(currentPlatformIndex + 1);
     let dirX = (target.x - position.x) / 4.05, dirZ = (target.z - position.z) / 4.05;
     if (distance > 12) {
       const len = Math.hypot(dx, dy) || 1;
-      dirX = (-dx / len) * .79 + dirX * .21; dirZ = (-dy / len) * .79 + dirZ * .21;
+      dirX = (-dx / len) * 0.81 + dirX * 0.19;
+      dirZ = (-dy / len) * 0.81 + dirZ * 0.19;
       const ll = Math.hypot(dirX, dirZ) || 1; dirX /= ll; dirZ /= ll;
     } else { const ll = Math.hypot(dirX, dirZ) || 1; dirX /= ll; dirZ /= ll; }
-    const power = distance < 12 ? .27 : clamp(distance / (Math.min(innerWidth, innerHeight) * .48), .08, 1);
+    const power = distance < 12 ? 0.28 : clamp(distance / (Math.min(innerWidth, innerHeight) * 0.46), 0.08, 1);
     const speed = 4.65 + power * 2.55;
-    for (let i = 0; i < 12; i++) {
-      const t = .09 + i * .075;
-      const marker = project(position.x + dirX * speed * t, position.y + 8.25 * t - .5 * 17.2 * t * t, position.z + dirZ * speed * t);
-      ctx.save(); ctx.globalAlpha = .95 - i * .045; ctx.fillStyle = i < 7 ? '#9bfff0' : '#c9adff'; ctx.shadowColor = i < 7 ? '#4effdc' : '#a68aff'; ctx.shadowBlur = 11;
-      ctx.beginPath(); ctx.arc(marker.x, marker.y, Math.max(1.7, 3.5 - i * .12), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+    // Predicted Landing Target Reticle on Destination Platform
+    const reticlePos = project(target.x, target.surface + 0.03, target.z);
+    ctx.save();
+    ctx.shadowColor = '#40f5e8'; ctx.shadowBlur = 14;
+    ctx.strokeStyle = 'rgba(64, 245, 232, 0.85)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.ellipse(reticlePos.x, reticlePos.y, reticlePos.s * 0.42, reticlePos.s * 0.18, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(reticlePos.x, reticlePos.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.restore();
+
+    // Laser Trajectory Nodes
+    for (let i = 0; i < 14; i++) {
+      const t = 0.08 + i * 0.070;
+      const marker = project(
+        position.x + dirX * speed * t,
+        position.y + 8.25 * t - 0.5 * 17.2 * t * t,
+        position.z + dirZ * speed * t
+      );
+      ctx.save();
+      const nodePulse = Math.sin(time * 12 - i * 0.5) * 0.5 + 0.5;
+      const alpha = (1 - i * 0.065) * (0.7 + 0.3 * nodePulse);
+      ctx.globalAlpha = clamp(alpha, 0.1, 0.98);
+      ctx.fillStyle = i < 8 ? '#62fff2' : '#c9adff';
+      ctx.shadowColor = i < 8 ? '#40f5e8' : '#a68aff';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(marker.x, marker.y, Math.max(1.8, 3.8 - i * 0.14), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   }
+
+  // Hyper-Realistic Translucent Gelatin with Fluid Dynamics, Viscous Nucleus & Glass Eyes
   function drawJelly() {
     const p = project(position.x, position.y, position.z);
+    const palette = colors[tint];
+    const baseR = p.s * 0.58;
     const scaleX = spring.value[0], scaleY = spring.value[1], scaleZ = spring.value[2];
-    const radiusX = p.s * .55 * scaleX;
-    const radiusY = p.s * .66 * scaleY;
-    // A grounded, diffused shadow tells the eye how far the jelly is from the platform.
+    const radiusX = baseR * scaleX;
+    const radiusY = baseR * 1.12 * scaleY;
+
+    // Contact Surface Meniscus & Shadow Detection
     let floor = null;
     for (const pl of platformMap.values()) if (pl.index === currentPlatformIndex) floor = pl;
-    if (floor) {
-      const shadow = project(position.x, floor.surface + .015, position.z);
-      const shadowAlpha = clamp(1 - Math.max(0, position.y - (floor.surface + .55)) * .12, .22, .55);
-      ctx.save(); ctx.globalAlpha = shadowAlpha; ctx.fillStyle = '#05091b'; ctx.filter = 'blur(5px)';
-      ctx.beginPath(); ctx.ellipse(shadow.x, shadow.y + 4, radiusX * 1.35, radiusY * .25, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    const groundLevel = floor ? floor.surface + 0.55 : -999;
+    const distToGround = Math.max(0, position.y - groundLevel);
+    const onGround = distToGround < 0.12 && (state === 'idle' || state === 'aiming');
+
+    // 1. Realistic Multi-Layer Ground Contact Shadows & Caustic Light Pool
+    if (distToGround < 3.2 && floor) {
+      const shadowSpot = project(position.x, floor.surface + 0.015, position.z);
+      const shadowAlpha = clamp(1 - distToGround * 0.28, 0.18, 0.65);
+      const shadowW = radiusX * (1 + distToGround * 0.18);
+      const shadowH = radiusY * 0.28 * (1 + distToGround * 0.12);
+
+      ctx.save();
+      // Tight Ambient Occlusion Patch
+      if (onGround) {
+        ctx.fillStyle = 'rgba(2, 4, 12, 0.85)';
+        ctx.beginPath();
+        ctx.ellipse(shadowSpot.x, shadowSpot.y + 2, shadowW * 0.78, shadowH * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Diffused Directional Colored Drop Shadow
+      const shadowGrad = ctx.createRadialGradient(shadowSpot.x, shadowSpot.y, 2, shadowSpot.x, shadowSpot.y, shadowW);
+      shadowGrad.addColorStop(0, 'rgba(4, 7, 22, ' + shadowAlpha + ')');
+      shadowGrad.addColorStop(0.55, palette.glow.replace(/[\d\.]+\)$/, (0.28 * shadowAlpha) + ')'));
+      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = shadowGrad;
+      ctx.beginPath();
+      ctx.ellipse(shadowSpot.x + 3 * (1 - shadowAlpha), shadowSpot.y + 4, shadowW, shadowH, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
+
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.rotate(clamp(velocity.x * .025, -.12, .12));
-    ctx.scale(1, 1);
-    const palette = colors[tint];
-    const bodyGradient = ctx.createRadialGradient(-radiusX * .34, -radiusY * .47, 1, radiusX * .06, radiusY * .1, radiusX * 1.26);
-    bodyGradient.addColorStop(0, '#ffffff'); bodyGradient.addColorStop(.09, palette.outer); bodyGradient.addColorStop(.40, palette.outer); bodyGradient.addColorStop(.75, palette.inner); bodyGradient.addColorStop(1, tint === 'aqua' ? 'rgba(35,98,184,.78)' : 'rgba(78,49,150,.76)');
-    ctx.shadowColor = palette.glow; ctx.shadowBlur = 19;
-    ctx.beginPath(); ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2); ctx.fillStyle = bodyGradient; ctx.fill(); ctx.shadowBlur = 0;
-    // Inner translucent volume and a crisp specular rim make the jelly feel glassy.
-    ctx.globalAlpha = .4; ctx.beginPath(); ctx.ellipse(0, radiusY * .12, radiusX * .75, radiusY * .75, -.06, 0, Math.PI * 2);
-    const inner = ctx.createRadialGradient(-radiusX * .2, -radiusY * .03, 1, 0, radiusY * .1, radiusX);
-    inner.addColorStop(0, 'rgba(255,255,255,.7)'); inner.addColorStop(1, palette.inner); ctx.fillStyle = inner; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(0, 0, radiusX * .985, radiusY * .985, 0, 0, Math.PI * 2); ctx.stroke();
-    // Large shiny eyes, blush and a tiny nervous smile.
-    const eyeY = radiusY * .08, eyeDX = radiusX * .29, eyeR = Math.max(4.5, radiusX * .145);
+
+    // Directional In-Flight Tilt & Harmonic Fluid Wobble
+    const tilt = clamp(velocity.x * 0.032, -0.25, 0.25);
+    ctx.rotate(tilt);
+
+    // 2. Volumetric Gelatin Body (Subsurface Light Transmission Gradient)
+    const lx = -radiusX * 0.32, ly = -radiusY * 0.38;
+    const bodyGrad = ctx.createRadialGradient(lx, ly, radiusX * 0.08, 0, radiusY * 0.08, radiusX * 1.25);
+    bodyGrad.addColorStop(0, palette.highlight);
+    bodyGrad.addColorStop(0.08, palette.core);
+    bodyGrad.addColorStop(0.32, palette.outer);
+    bodyGrad.addColorStop(0.68, palette.inner);
+    bodyGrad.addColorStop(0.92, palette.deep);
+    bodyGrad.addColorStop(1.0, palette.rim);
+
+    // Outer Ambient Glow Bloom
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = onGround ? 22 : 28;
+
+    // Organic Bézier Gelatin Contour (Squashes flat at bottom against platform surface)
+    ctx.beginPath();
+    const bottomFlatness = onGround ? radiusY * 0.22 : 0;
+    ctx.moveTo(0, -radiusY);
+    // Right Dome
+    ctx.bezierCurveTo(radiusX * 0.95, -radiusY, radiusX * 1.05, radiusY * 0.45, radiusX * 0.90, radiusY - bottomFlatness);
+    // Flat/Meniscus Bottom
+    ctx.bezierCurveTo(radiusX * 0.45, radiusY + bottomFlatness * 0.2, -radiusX * 0.45, radiusY + bottomFlatness * 0.2, -radiusX * 0.90, radiusY - bottomFlatness);
+    // Left Dome
+    ctx.bezierCurveTo(-radiusX * 1.05, radiusY * 0.45, -radiusX * 0.95, -radiusY, 0, -radiusY);
+    ctx.closePath();
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 3. Floating Luminescent Inner Nucleus (Secondary Spring Inertia)
+    const nucX = clamp(nucleusLag.x, -radiusX * 0.22, radiusX * 0.22);
+    const nucY = clamp(nucleusLag.y + radiusY * 0.08, -radiusY * 0.20, radiusY * 0.28);
+    const nucR = radiusX * 0.42;
+    const nucGrad = ctx.createRadialGradient(nucX, nucY, 1, nucX, nucY, nucR);
+    nucGrad.addColorStop(0, palette.core);
+    nucGrad.addColorStop(0.45, palette.outer);
+    nucGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = nucGrad;
+    ctx.beginPath();
+    ctx.arc(nucX, nucY, nucR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4. Inner Translucent Volume & Crisp Specular Rim
+    ctx.globalAlpha = 0.42;
+    ctx.beginPath();
+    ctx.ellipse(0, radiusY * 0.10, radiusX * 0.78, radiusY * 0.74, -0.05, 0, Math.PI * 2);
+    const innerSheen = ctx.createRadialGradient(-radiusX * 0.2, -radiusY * 0.05, 1, 0, radiusY * 0.1, radiusX * 0.95);
+    innerSheen.addColorStop(0, 'rgba(255, 255, 255, 0.75)');
+    innerSheen.addColorStop(0.6, palette.outer);
+    innerSheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = innerSheen;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+
+    // Razor-Sharp Fresnel Edge Stroke
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radiusX * 0.98, radiusY * 0.98, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 5. Curved Glass Specular Highlights (Key Light + Opposing Rim Glint)
+    // Primary Curved Glass Droplet at Upper-Left
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.beginPath();
+    ctx.ellipse(-radiusX * 0.36, -radiusY * 0.48, radiusX * 0.26, radiusY * 0.11, -0.62, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Secondary Pinpoint Glint
+    ctx.beginPath();
+    ctx.arc(-radiusX * 0.14, -radiusY * 0.58, Math.max(2.2, radiusX * 0.055), 0, Math.PI * 2);
+    ctx.fill();
+
+    // Subtle Opposing Rim Crescent
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(radiusX * 0.35, -radiusY * 0.25, radiusX * 0.18, -0.7, 0.7);
+    ctx.stroke();
+
+    // 6. Glistening 3D Animated Eyes & Rosy Cheeks
+    const eyeY = radiusY * 0.06;
+    const eyeDX = radiusX * 0.30;
+    const eyeR = Math.max(5.2, radiusX * 0.155);
+    const eyeH = eyeR * 1.32;
+    const isPanicking = $('avatar-widget').classList.contains('is-panicking');
+    const isAiming = state === 'aiming';
+
     for (const sign of [-1, 1]) {
-      ctx.fillStyle = 'rgba(32,30,70,.98)'; ctx.beginPath(); ctx.ellipse(sign * eyeDX, eyeY, eyeR * .78, eyeR * 1.02, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.97)'; ctx.beginPath(); ctx.arc(sign * eyeDX - eyeR * .24, eyeY - eyeR * .34, eyeR * .23, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,108,171,.48)'; ctx.beginPath(); ctx.ellipse(sign * radiusX * .52, radiusY * .31, radiusX * .14, radiusY * .07, 0, 0, Math.PI * 2); ctx.fill();
+      const ex = sign * eyeDX;
+      // 3D Glass Cornea & Deep Obsidian Pupil
+      ctx.fillStyle = '#100f24';
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, eyeR * 0.82, eyeH, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cornea Catchlights (Primary Large Highlight + Secondary Bounce Reflection)
+      ctx.fillStyle = '#ffffff';
+      const lookDX = isAiming ? sign * 0.5 : 0;
+      ctx.beginPath();
+      ctx.arc(ex - eyeR * 0.28 + lookDX, eyeY - eyeH * 0.35, eyeR * 0.36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ex + eyeR * 0.22, eyeY + eyeH * 0.30, eyeR * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft Subsurface Glowing Pink Blush
+      const blushGrad = ctx.createRadialGradient(sign * radiusX * 0.54, radiusY * 0.30, 1, sign * radiusX * 0.54, radiusY * 0.30, radiusX * 0.18);
+      blushGrad.addColorStop(0, 'rgba(255, 95, 160, 0.55)');
+      blushGrad.addColorStop(1, 'rgba(255, 95, 160, 0)');
+      ctx.fillStyle = blushGrad;
+      ctx.beginPath();
+      ctx.ellipse(sign * radiusX * 0.54, radiusY * 0.30, radiusX * 0.18, radiusY * 0.09, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.strokeStyle = '#312958'; ctx.lineWidth = Math.max(2, radiusX * .055); ctx.lineCap = 'round'; ctx.beginPath();
-    if (state === 'aiming' && pull.length > Math.min(innerWidth, innerHeight) * .25) {
-      ctx.moveTo(-radiusX * .12, radiusY * .37); ctx.lineTo(0, radiusY * .32); ctx.lineTo(radiusX * .12, radiusY * .37);
+
+    // Dynamic Expressive Mouth
+    ctx.strokeStyle = '#282046';
+    ctx.lineWidth = Math.max(2.2, radiusX * 0.06);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (isPanicking) {
+      ctx.ellipse(0, radiusY * 0.40, radiusX * 0.14, radiusY * 0.10, 0, 0, Math.PI * 2);
+    } else if (isAiming) {
+      ctx.moveTo(-radiusX * 0.11, radiusY * 0.36);
+      ctx.lineTo(0, radiusY * 0.32);
+      ctx.lineTo(radiusX * 0.11, radiusY * 0.36);
     } else {
-      ctx.moveTo(-radiusX * .105, radiusY * .38); ctx.quadraticCurveTo(0, radiusY * .47, radiusX * .105, radiusY * .38);
+      ctx.moveTo(-radiusX * 0.11, radiusY * 0.37);
+      ctx.quadraticCurveTo(0, radiusY * 0.47, radiusX * 0.11, radiusY * 0.37);
     }
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.ellipse(-radiusX * .38, -radiusY * .54, radiusX * .15, radiusY * .055, -.53, 0, Math.PI * 2); ctx.fill();
+
     ctx.restore();
   }
+
   function path(points) {
     ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
     ctx.closePath();
   }
+
   function drawParticles() {
     for (const part of particles) {
       const p = project(part.x, part.y, part.z);
-      ctx.save(); ctx.globalAlpha = clamp(part.life, 0, 1); ctx.shadowColor = colors[tint].glow; ctx.shadowBlur = 12;
-      const g = ctx.createRadialGradient(p.x - 2, p.y - 3, .1, p.x, p.y, 7);
-      g.addColorStop(0, '#fff'); g.addColorStop(.35, colors[tint].outer); g.addColorStop(1, colors[tint].inner);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(p.x, p.y, 4 + part.life * 3, 6 + part.life * 2, part.vx * .08, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      const pal = colors[part.tint || tint];
+      ctx.save();
+      ctx.globalAlpha = clamp(part.life, 0, 1);
+      ctx.shadowColor = pal.glow;
+      ctx.shadowBlur = 14;
+      const g = ctx.createRadialGradient(p.x - 2, p.y - 2, 0.1, p.x, p.y, 7);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.35, pal.outer);
+      g.addColorStop(1, pal.inner);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 4.5 + part.life * 3.5, 6.5 + part.life * 2.5, part.vx * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   }
+
   function render() {
     const width = innerWidth, height = innerHeight;
     ctx.clearRect(0, 0, width, height);
@@ -558,13 +1189,16 @@
     drawParticles();
     if (state === 'flying') {
       const fx = project(position.x, position.y, position.z);
-      const sheen = ctx.createRadialGradient(fx.x, fx.y, 1, fx.x, fx.y, 54);
-      sheen.addColorStop(0, 'rgba(111,248,224,.06)'); sheen.addColorStop(1, 'rgba(111,248,224,0)');
-      ctx.fillStyle = sheen; ctx.fillRect(fx.x - 55, fx.y - 55, 110, 110);
+      const sheen = ctx.createRadialGradient(fx.x, fx.y, 1, fx.x, fx.y, 65);
+      sheen.addColorStop(0, 'rgba(64, 245, 232, 0.08)');
+      sheen.addColorStop(1, 'rgba(64, 245, 232, 0)');
+      ctx.fillStyle = sheen;
+      ctx.fillRect(fx.x - 65, fx.y - 65, 130, 130);
     }
   }
+
   function drawFrame(now) {
-    const dt = Math.min(.034, Math.max(0, (now - (lastFrame || now)) / 1000));
+    const dt = Math.min(0.034, Math.max(0, (now - (lastFrame || now)) / 1000));
     lastFrame = now;
     if (!hidden) {
       time += dt;
@@ -580,13 +1214,31 @@
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     canvas.width = Math.floor(innerWidth * dpr);
     canvas.height = Math.floor(innerHeight * dpr);
-    canvas.style.width = `${innerWidth}px`; canvas.style.height = `${innerHeight}px`;
+    canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    stars = Array.from({ length: 96 }, () => ({
-      x: Math.random(), y: Math.random(), r: .35 + Math.random() * 1.45,
-      speed: .35 + Math.random() * 1.25, phase: Math.random() * Math.PI * 2,
-      color: Math.random() < .5 ? 'rgba(181,213,255,.85)' : 'rgba(64,245,232,.95)'
+
+    // Multi-spectral realistic starfield (Blue giants, warm yellow, cool dwarfs, hero cross stars)
+    const starColors = ['rgba(175, 215, 255, 0.90)', 'rgba(255, 235, 175, 0.88)', 'rgba(64, 245, 232, 0.92)', 'rgba(255, 175, 215, 0.85)'];
+    stars = Array.from({ length: 140 }, (_, idx) => ({
+      x: Math.random(), y: Math.random(),
+      r: 0.35 + Math.random() * 1.55,
+      speed: 0.35 + Math.random() * 1.35,
+      phase: Math.random() * Math.PI * 2,
+      color: starColors[Math.floor(Math.random() * starColors.length)],
+      hero: idx < 12 // 12 bright stars with cross-diffraction spikes
     }));
+
+    // Ambient floating cosmic dust motes
+    motes = Array.from({ length: 28 }, () => ({
+      x: Math.random(), y: Math.random(),
+      r: 1.2 + Math.random() * 2.2,
+      vx: (Math.random() - 0.5) * 0.02,
+      vy: -0.015 - Math.random() * 0.025,
+      speed: 0.4 + Math.random() * 0.8,
+      phase: Math.random() * Math.PI * 2,
+      color: Math.random() < 0.5 ? 'rgba(64, 245, 232, 0.35)' : 'rgba(180, 150, 255, 0.30)'
+    }));
+
     render();
   }
 
