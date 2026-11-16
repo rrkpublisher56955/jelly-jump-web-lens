@@ -234,6 +234,7 @@ async function boot(): Promise<void> {
   window.setTimeout(() => {
     loadingScreen.classList.add('is-done');
     ytRouter.notifyGameReady();
+    (window as unknown as { __JELLY_LENS_READY__?: () => void }).__JELLY_LENS_READY__?.();
   }, 360);
 }
 

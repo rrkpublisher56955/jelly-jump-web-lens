@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#090c22" />
     <meta name="description" content="Jelly Jump — stretch, fling, and bounce your squishy jelly through a dreamy 3D obstacle course." />
+    <link rel="stylesheet" href="./src/styles.css" />
     <title>Jelly Jump — Soft Body Sprint</title>
   </head>
   <body>
@@ -93,6 +94,18 @@
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
       </main>
     </div>
+    <script>
+      (function() {
+        var isBuilt = !!document.querySelector('script[src*="assets/index"]');
+        var isViteDev = !!document.querySelector('script[src*="@vite/client"]') || location.port === '5173';
+        if (!isBuilt && !isViteDev) {
+          var s = document.createElement('script');
+          s.src = './browser-preview.js';
+          s.defer = true;
+          document.body.appendChild(s);
+        }
+      })();
+    </script>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>
